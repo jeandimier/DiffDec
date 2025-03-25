@@ -127,6 +127,7 @@ def main(args):
         last_checkpoint = find_last_checkpoint(checkpoints_dir)
         print(f"Training will be resumed from the latest checkpoint {last_checkpoint}")
 
+    mlflow_logger.experiment.log_artifact(mlflow_logger.run_id, __file__)
     print("Start training")
     trainer.fit(model=ddpm, ckpt_path=last_checkpoint)
 
