@@ -1,4 +1,4 @@
-exp_name: 'diffdec_single'
+exp_name: "diffdec_single"
 data: data/single
 train_data_prefix: crossdocksingle_train.full
 val_data_prefix: crossdocksingle_test.full
@@ -12,17 +12,17 @@ enable_progress_bar: False
 model: egnn_dynamics
 lr: 2.0e-4
 batch_size: 8
-n_layers: 6
+n_layers: 5
 n_epochs: 1000
 test_epochs: 20
 n_stability_samples: 5
-nf: 128
+nf: 32
 activation: silu
 attention: False
 condition_time: True
 tanh: False
 norm_constant: 0.000001
-inv_sublayers: 2
+inv_sublayers: 1
 include_charges: False
 diffusion_loss_type: l2
 data_augmentation: False
@@ -32,7 +32,7 @@ center_of_mass: anchors # [scaffold, anchors]
 sin_embedding: False
 normalization_factor: 100
 normalize_factors: [1, 4, 10]
-aggregation_method: 'sum'
+aggregation_method: "sum"
 normalization: batch_norm
 
 resume:

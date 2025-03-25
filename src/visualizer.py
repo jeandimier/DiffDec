@@ -1,17 +1,16 @@
-import torch
 import os
+
 import imageio
 import matplotlib.pyplot as plt
 import numpy as np
-import glob
-import random
-
+import torch
 from sklearn.decomposition import PCA
+
 from src import const
 from src.molecule_builder import get_bond_order
 
 
-def save_xyz_file_fa(path, one_hot, positions, node_mask, names, suffix=''):
+def save_xyz_file_fa(path, one_hot, positions, node_mask, names, suffix=""):
     idx2atom = const.IDX2ATOM
 
     for batch_i in range(one_hot.size(0)):
@@ -19,13 +18,13 @@ def save_xyz_file_fa(path, one_hot, positions, node_mask, names, suffix=''):
         n_atoms = mask.sum()
         atom_idx = torch.where(mask)[0]
 
-        f = open(os.path.join(path, f'{names[batch_i]}_{suffix}.xyz'), "w")
+        f = open(os.path.join(path, f"{names[batch_i]}_{suffix}.xyz"), "w")
         atoms = torch.argmax(one_hot[batch_i], dim=1)
         cnt = 0
         for atom_i in atom_idx:
             atom = atoms[atom_i].item()
             atom = idx2atom[atom]
-            if atom == '#':
+            if atom == "#":
                 cnt += 1
                 continue
         n_atoms -= cnt
@@ -33,14 +32,21 @@ def save_xyz_file_fa(path, one_hot, positions, node_mask, names, suffix=''):
         for atom_i in atom_idx:
             atom = atoms[atom_i].item()
             atom = idx2atom[atom]
-            if atom == '#':
+            if atom == "#":
                 continue
-            f.write("%s %.9f %.9f %.9f\n" % (
-                atom, positions[batch_i, atom_i, 0], positions[batch_i, atom_i, 1], positions[batch_i, atom_i, 2]
-            ))
+            f.write(
+                "%s %.9f %.9f %.9f\n"
+                % (
+                    atom,
+                    positions[batch_i, atom_i, 0],
+                    positions[batch_i, atom_i, 1],
+                    positions[batch_i, atom_i, 2],
+                )
+            )
         f.close()
 
-def save_xyz_file(path, one_hot, positions, node_mask, names, suffix=''):
+
+def save_xyz_file(path, one_hot, positions, node_mask, names, suffix=""):
     idx2atom = const.IDX2ATOM
 
     for batch_i in range(one_hot.size(0)):
@@ -48,31 +54,39 @@ def save_xyz_file(path, one_hot, positions, node_mask, names, suffix=''):
         n_atoms = mask.sum()
         atom_idx = torch.where(mask)[0]
 
-        f = open(os.path.join(path, f'{names[batch_i]}_{suffix}.xyz'), "w")
+        f = open(os.path.join(path, f"{names[batch_i]}_{suffix}.xyz"), "w")
         f.write("%d\n\n" % n_atoms)
         atoms = torch.argmax(one_hot[batch_i], dim=1)
         for atom_i in atom_idx:
             atom = atoms[atom_i].item()
             atom = idx2atom[atom]
-            f.write("%s %.9f %.9f %.9f\n" % (
-                atom, positions[batch_i, atom_i, 0], positions[batch_i, atom_i, 1], positions[batch_i, atom_i, 2]
-            ))
+            f.write(
+                "%s %.9f %.9f %.9f\n"
+                % (
+                    atom,
+                    positions[batch_i, atom_i, 0],
+                    positions[batch_i, atom_i, 1],
+                    positions[batch_i, atom_i, 2],
+                )
+            )
         f.close()
 
 
-def load_xyz_files(path, suffix=''):
+def load_xyz_files(path, suffix=""):
     files = []
     for fname in os.listdir(path):
-        if fname.endswith(f'_{suffix}.xyz'):
+        if fname.endswith(f"_{suffix}.xyz"):
             files.append(fname)
-    files = sorted(files, key=lambda f: -int(f.replace(f'_{suffix}.xyz', '').split('_')[-1]))
+    files = sorted(
+        files, key=lambda f: -int(f.replace(f"_{suffix}.xyz", "").split("_")[-1])
+    )
     return [os.path.join(path, fname) for fname in files]
 
 
 def load_molecule_xyz(file):
     atom2idx = const.ATOM2IDX
     idx2atom = const.IDX2ATOM
-    with open(file, encoding='utf8') as f:
+    with open(file, encoding="utf8") as f:
         n_atoms = int(f.readline())
         one_hot = torch.zeros(n_atoms, len(idx2atom))
         charges = torch.zeros(n_atoms, 1)
@@ -80,7 +94,7 @@ def load_molecule_xyz(file):
         f.readline()
         atoms = f.readlines()
         for i in range(n_atoms):
-            atom = atoms[i].split(' ')
+            atom = atoms[i].split(" ")
             atom_type = atom[0]
             one_hot[i, atom2idx[atom_type]] = 1
             position = torch.Tensor([float(e) for e in atom[1:]])
@@ -93,12 +107,16 @@ def draw_sphere(ax, x, y, z, size, color, alpha):
     v = np.linspace(0, np.pi, 100)
 
     xs = size * np.outer(np.cos(u), np.sin(v))
-    ys = size * np.outer(np.sin(u), np.sin(v)) #* 0.8
+    ys = size * np.outer(np.sin(u), np.sin(v))  # * 0.8
     zs = size * np.outer(np.ones(np.size(u)), np.cos(v))
-    ax.plot_surface(x + xs, y + ys, z + zs, rstride=2, cstride=2, color=color, alpha=alpha)
+    ax.plot_surface(
+        x + xs, y + ys, z + zs, rstride=2, cstride=2, color=color, alpha=alpha
+    )
 
 
-def plot_molecule(ax, positions, atom_type, alpha, spheres_3d, hex_bg_color, scaffold_mask=None):
+def plot_molecule(
+    ax, positions, atom_type, alpha, spheres_3d, hex_bg_color, scaffold_mask=None
+):
     x = positions[:, 0]
     y = positions[:, 1]
     z = positions[:, 2]
@@ -108,7 +126,7 @@ def plot_molecule(ax, positions, atom_type, alpha, spheres_3d, hex_bg_color, sca
 
     colors_dic = np.array(const.COLORS)
     radius_dic = np.array(const.RADII)
-    area_dic = 1500 * radius_dic ** 2
+    area_dic = 1500 * radius_dic**2
 
     areas = area_dic[atom_type]
     radii = radius_dic[atom_type]
@@ -133,10 +151,12 @@ def plot_molecule(ax, positions, atom_type, alpha, spheres_3d, hex_bg_color, sca
                     linewidth_factor = 1
                 linewidth_factor *= 0.5
                 ax.plot(
-                    [x[i], x[j]], [y[i], y[j]], [z[i], z[j]],
+                    [x[i], x[j]],
+                    [y[i], y[j]],
+                    [z[i], z[j]],
                     linewidth=line_width * linewidth_factor * 2,
                     c=hex_bg_color,
-                    alpha=alpha
+                    alpha=alpha,
                 )
 
     # from pdb import set_trace
@@ -164,17 +184,26 @@ def plot_molecule(ax, positions, atom_type, alpha, spheres_3d, hex_bg_color, sca
         ax.scatter(x, y, z, s=areas, alpha=0.9 * alpha, c=colors)
 
 
-def plot_data3d(positions, atom_type, camera_elev=0, camera_azim=0, save_path=None, spheres_3d=False,
-                bg='black', alpha=1., scaffold_mask=None):
+def plot_data3d(
+    positions,
+    atom_type,
+    camera_elev=0,
+    camera_azim=0,
+    save_path=None,
+    spheres_3d=False,
+    bg="black",
+    alpha=1.0,
+    scaffold_mask=None,
+):
     black = (0, 0, 0)
     white = (1, 1, 1)
-    hex_bg_color = '#FFFFFF' if bg == 'black' else '#000000' #'#666666'
+    hex_bg_color = "#FFFFFF" if bg == "black" else "#000000"  #'#666666'
 
     fig = plt.figure(figsize=(10, 10))
-    ax = fig.add_subplot(projection='3d')
-    ax.set_aspect('auto')
+    ax = fig.add_subplot(projection="3d")
+    ax.set_aspect("auto")
     ax.view_init(elev=camera_elev, azim=camera_azim)
-    if bg == 'black':
+    if bg == "black":
         ax.set_facecolor(black)
     else:
         ax.set_facecolor(white)
@@ -183,13 +212,19 @@ def plot_data3d(positions, atom_type, camera_elev=0, camera_azim=0, save_path=No
     ax.zaxis.pane.set_alpha(0)
     ax._axis3don = False
 
-    if bg == 'black':
+    if bg == "black":
         ax.w_xaxis.line.set_color("black")
     else:
         ax.w_xaxis.line.set_color("white")
 
     plot_molecule(
-        ax, positions, atom_type, alpha, spheres_3d, hex_bg_color, scaffold_mask=scaffold_mask
+        ax,
+        positions,
+        atom_type,
+        alpha,
+        spheres_3d,
+        hex_bg_color,
+        scaffold_mask=scaffold_mask,
     )
 
     max_value = positions.abs().max().item()
@@ -200,12 +235,12 @@ def plot_data3d(positions, atom_type, camera_elev=0, camera_azim=0, save_path=No
     dpi = 120 if spheres_3d else 50
 
     if save_path is not None:
-        plt.savefig(save_path, bbox_inches='tight', pad_inches=0.0, dpi=dpi)
+        plt.savefig(save_path, bbox_inches="tight", pad_inches=0.0, dpi=dpi)
         # plt.savefig(save_path, bbox_inches='tight', pad_inches=0.0, dpi=dpi, transparent=True)
 
         if spheres_3d:
             img = imageio.imread(save_path)
-            img_brighter = np.clip(img * 1.4, 0, 255).astype('uint8')
+            img_brighter = np.clip(img * 1.4, 0, 255).astype("uint8")
             imageio.imsave(save_path, img_brighter)
     else:
         plt.show()
@@ -213,7 +248,13 @@ def plot_data3d(positions, atom_type, camera_elev=0, camera_azim=0, save_path=No
 
 
 def visualize_chain(
-        path, spheres_3d=False, bg="black", alpha=1.0, wandb=None, mode="chain", scaffold_mask=None
+    path,
+    spheres_3d=False,
+    bg="black",
+    alpha=1.0,
+    wandb=None,
+    mode="chain",
+    scaffold_mask=None,
 ):
     files = load_xyz_files(path)
     save_paths = []
@@ -233,9 +274,10 @@ def visualize_chain(
         positions = pca.transform(positions)
         positions = torch.tensor(positions)
 
-        fn = file[:-4] + '.png'
+        fn = file[:-4] + ".png"
         plot_data3d(
-            positions, atom_type,
+            positions,
+            atom_type,
             save_path=fn,
             spheres_3d=spheres_3d,
             alpha=alpha,
@@ -248,7 +290,7 @@ def visualize_chain(
 
     imgs = [imageio.imread(fn) for fn in save_paths]
     dirname = os.path.dirname(save_paths[0])
-    gif_path = dirname + '/output.gif'
+    gif_path = dirname + "/output.gif"
     imageio.mimsave(gif_path, imgs, subrectangles=True)
 
     if wandb is not None:

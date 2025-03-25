@@ -1,5 +1,8 @@
-logs
-models
-ckpt
-samples*
-formatted*
+**/logs
+**/models
+**/*.ckpt
+**/*samples*
+**/*formatted*
+**/data
+**/*.pyc
+**/__pycache__

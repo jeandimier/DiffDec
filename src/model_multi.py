@@ -2,13 +2,12 @@ import numpy as np
 import os
 import pytorch_lightning as pl
 import torch
-import wandb
 
 from src import utils
 from src.egnn import DynamicsWithPockets
 from src.edm_multi import EDM
 from src.datasets import (
-    create_templates_for_rgroup_generation_multi, get_dataloader, 
+    create_templates_for_rgroup_generation_multi, get_dataloader,
     MultiRDataset_anchor, collate_mr
 )
 from src.molecule_builder import build_molecules
