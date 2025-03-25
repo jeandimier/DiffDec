@@ -5,9 +5,9 @@ import sys
 from datetime import datetime
 
 import yaml
-from pytorch_lightning import Trainer, callbacks, loggers
+from pytorch_lightning import Trainer
 
-from mlflow_utils import get_mlflow_logger
+from mlflow_utils import MLFlowModelCheckpoint, get_mlflow_logger
 from src.const import NUMBER_OF_ATOM_TYPES
 from src.model_single import DDPM
 from src.utils import Logger, disable_rdkit_logging
@@ -45,7 +45,7 @@ def main(args):
 
     torch_device = "cuda:0" if args.device == "gpu" else "cpu"
 
-    logger = get_mlflow_logger(run_name="metrics", experiment_name="diffdec")
+    mlflow_logger = get_mlflow_logger(run_name="metrics", experiment_name="diffdec")
 
     number_of_atoms = NUMBER_OF_ATOM_TYPES
     in_node_nf = number_of_atoms + args.include_charges
@@ -91,17 +91,29 @@ def main(args):
         inpainting=args.inpainting,
         anchors_context=anchors_context,
     )
-    checkpoint_callback = callbacks.ModelCheckpoint(
-        dirpath=checkpoints_dir,
-        filename=experiment + "_{epoch:02d}",
-        monitor="loss/val",
-        save_top_k=-1,
-        every_n_epochs=20,
-    )
+
+    callbacks = [
+        MLFlowModelCheckpoint(
+            mlflow_logger,
+            filename="best_train_mse",
+            monitor="train_pos_MeanSquaredError",
+            mode="min",
+        ),
+        MLFlowModelCheckpoint(
+            mlflow_logger,
+            filename="best_val_mse",
+            monitor="val_tot_MeanSquaredError",
+            mode="min",
+        ),
+        MLFlowModelCheckpoint(
+            mlflow_logger, filename="last_epoch", monitor="epoch", mode="max"
+        ),
+    ]
+
     trainer = Trainer(
         max_epochs=args.n_epochs,
-        logger=logger,
-        callbacks=checkpoint_callback,
+        logger=mlflow_logger,
+        callbacks=callbacks,
         accelerator=args.device,
         devices=1,
         num_sanity_val_steps=0,
