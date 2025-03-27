@@ -575,14 +575,16 @@ class Dynamics(nn.Module):
                 rgroup_mask=rgroup_mask,
                 edge_mask=edge_mask,
             )
-            vel = (
-                x_final - x
-            ) * node_mask  # This masking operation is redundant but just in case
+
+            # This masking operation is redundant but just in case
+            vel = (x_final - x) * node_mask
+
         elif self.model == "gnn_dynamics":
             xh = torch.cat([x, h], dim=1)
             output = self.dynamics(xh, edges, node_mask=node_mask)
             vel = output[:, 0:3] * node_mask
             h_final = output[:, 3:]
+
         else:
             raise NotImplementedError
 
