@@ -230,7 +230,6 @@ class DDPM(pl.LightningModule):
         # Applying random rotation
         if training and self.data_augmentation:
             x = utils.random_rotation(x)
-
         (
             delta_log_px,
             kl_prior,
@@ -250,6 +249,7 @@ class DDPM(pl.LightningModule):
             edge_mask=edge_mask,
             context=context,
         )
+
         return (
             delta_log_px,
             kl_prior,
@@ -307,9 +307,17 @@ class DDPM(pl.LightningModule):
         return training_metrics
 
     def validation_step(self, data, *args):
-        delta_log_px, kl_prior, loss_term_t, loss_term_0, l2_loss, noise_t, noise_0 = (
-            self.forward(data, training=False)
-        )
+        (
+            delta_log_px,
+            kl_prior,
+            loss_term_t,
+            loss_term_0,
+            l2_loss,
+            noise_t,
+            noise_0,
+            l2_loss_atom,
+            l2_loss_pos,
+        ) = self.forward(data, training=False)
         vlb_loss = kl_prior + loss_term_t + loss_term_0 - delta_log_px
         if self.loss_type == "l2":
             loss = l2_loss
@@ -328,14 +336,24 @@ class DDPM(pl.LightningModule):
             "vlb_loss": vlb_loss,
             "noise_t": noise_t,
             "noise_0": noise_0,
+            "l2_loss_pos": l2_loss_pos,
+            "l2_loss_atom": l2_loss_atom,
         }
         self.val_step_outputs.append(out_dict)
         return out_dict
 
     def test_step(self, data, *args):
-        delta_log_px, kl_prior, loss_term_t, loss_term_0, l2_loss, noise_t, noise_0 = (
-            self.forward(data, training=False)
-        )
+        (
+            delta_log_px,
+            kl_prior,
+            loss_term_t,
+            loss_term_0,
+            l2_loss,
+            noise_t,
+            noise_0,
+            l2_loss_atom,
+            l2_loss_pos,
+        ) = self.forward(data, training=False)
         vlb_loss = kl_prior + loss_term_t + loss_term_0 - delta_log_px
         if self.loss_type == "l2":
             loss = l2_loss
@@ -353,6 +371,8 @@ class DDPM(pl.LightningModule):
             "vlb_loss": vlb_loss,
             "noise_t": noise_t,
             "noise_0": noise_0,
+            "l2_loss_pos": l2_loss_pos,
+            "l2_loss_atom": l2_loss_atom,
         }
 
     def on_train_epoch_end(self):
@@ -461,7 +481,7 @@ class DDPM(pl.LightningModule):
         )
 
     def compute_best_validation_metrics(self):
-        loss = self.metrics[f"validity_and_connectivity/val"]
+        loss = self.metrics["validity_and_connectivity/val"]
         best_epoch = np.argmax(loss)
         best_metrics = {
             metric_name: metric_values[best_epoch]
