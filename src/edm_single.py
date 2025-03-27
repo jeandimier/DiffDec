@@ -1,32 +1,38 @@
+import math
+from typing import Union
+
+import numpy as np
 import torch
 import torch.nn.functional as F
-import numpy as np
-import math
 
 from src import utils
 from src.egnn import Dynamics
 from src.noise import GammaNetwork, PredefinedNoiseSchedule
-from typing import Union
+
 
 class EDM(torch.nn.Module):
     def __init__(
-            self,
-            dynamics: Union[Dynamics],
-            in_node_nf: int,
-            n_dims: int,
-            timesteps: int = 1000,
-            noise_schedule='learned',
-            noise_precision=1e-4,
-            loss_type='vlb',
-            norm_values=(1., 1., 1.),
-            norm_biases=(None, 0., 0.),
+        self,
+        dynamics: Dynamics,
+        in_node_nf: int,
+        n_dims: int,
+        timesteps: int = 1000,
+        noise_schedule="learned",
+        noise_precision=1e-4,
+        loss_type="vlb",
+        norm_values=(1.0, 1.0, 1.0),
+        norm_biases=(None, 0.0, 0.0),
     ):
         super().__init__()
-        if noise_schedule == 'learned':
-            assert loss_type == 'vlb', 'A noise schedule can only be learned with a vlb objective'
+        if noise_schedule == "learned":
+            assert loss_type == "vlb", (
+                "A noise schedule can only be learned with a vlb objective"
+            )
             self.gamma = GammaNetwork()
         else:
-            self.gamma = PredefinedNoiseSchedule(noise_schedule, timesteps=timesteps, precision=noise_precision)
+            self.gamma = PredefinedNoiseSchedule(
+                noise_schedule, timesteps=timesteps, precision=noise_precision
+            )
 
         self.dynamics = dynamics
         self.in_node_nf = in_node_nf
@@ -35,7 +41,9 @@ class EDM(torch.nn.Module):
         self.norm_values = norm_values
         self.norm_biases = norm_biases
 
-    def forward(self, x, h, node_mask, scaffold_mask, rgroup_mask, edge_mask, context=None):
+    def forward(
+        self, x, h, node_mask, scaffold_mask, rgroup_mask, edge_mask, context=None
+    ):
         # Normalization and concatenation
         x, h = self.normalize(x, h)
         xh = torch.cat([x, h], dim=2)
@@ -44,7 +52,9 @@ class EDM(torch.nn.Module):
         delta_log_px = self.delta_log_px(rgroup_mask).mean()
 
         # Sample t
-        t_int = torch.randint(0, self.T + 1, size=(x.size(0), 1), device=x.device).float()
+        t_int = torch.randint(
+            0, self.T + 1, size=(x.size(0), 1), device=x.device
+        ).float()
         s_int = t_int - 1
         t = t_int / self.T
         s = s_int / self.T
@@ -63,7 +73,9 @@ class EDM(torch.nn.Module):
 
         # Sample noise
         # Note: only for rgroup
-        eps_t = self.sample_combined_position_feature_noise(n_samples=x.size(0), n_nodes=x.size(1), mask=rgroup_mask)
+        eps_t = self.sample_combined_position_feature_noise(
+            n_samples=x.size(0), n_nodes=x.size(1), mask=rgroup_mask
+        )
 
         # Sample z_t given x, h for timestep t, from q(z_t | x, h)
         # Note: keep scaffold unchanged
@@ -83,15 +95,30 @@ class EDM(torch.nn.Module):
 
         # Computing basic error (further used for computing NLL and L2-loss)
         error_t = self.sum_except_batch((eps_t - eps_t_hat) ** 2)
+        error_t_pos = self.sum_except_batch(
+            ((eps_t - eps_t_hat) ** 2)[:, :, : self.n_dims].clone()
+        )
+        error_t_atom = self.sum_except_batch(
+            ((eps_t - eps_t_hat) ** 2)[:, :, self.n_dims :].clone()
+        )
 
         # Computing L2-loss for t>0
-        normalization = (self.n_dims + self.in_node_nf) * self.numbers_of_nodes(rgroup_mask)
+        normalization = (self.n_dims + self.in_node_nf) * self.numbers_of_nodes(
+            rgroup_mask
+        )
         l2_loss = error_t / normalization
         l2_loss = l2_loss.mean()
 
+        normalization_pos = self.n_dims * self.numbers_of_nodes(rgroup_mask)
+        l2_loss_pos = error_t_pos / normalization_pos
+        l2_loss_pos = l2_loss_pos.mean()
+
+        normalization_atom = self.in_node_nf * self.numbers_of_nodes(rgroup_mask)
+        l2_loss_atom = error_t_atom / normalization_atom
+        l2_loss_atom = l2_loss_atom.mean()
+
         # The KL between q(z_T | x) and p(z_T) = Normal(0, 1) (should be close to zero)
         kl_prior = self.kl_prior(xh, rgroup_mask).mean()
-
         # Computing NLL middle term
         SNR_weight = (self.SNR(gamma_s - gamma_t) - 1).squeeze(1).squeeze(1)
         loss_term_t = self.T * 0.5 * SNR_weight * error_t
@@ -108,29 +135,56 @@ class EDM(torch.nn.Module):
 
             # Computes the L_0 term (even if gamma_t is not actually gamma_0)
             # and selected only relevant via masking
-            loss_term_0 = -self.log_p_xh_given_z0_without_constants(h, z_t, gamma_t, eps_t, eps_t_hat, rgroup_mask)
+            loss_term_0 = -self.log_p_xh_given_z0_without_constants(
+                h, z_t, gamma_t, eps_t, eps_t_hat, rgroup_mask
+            )
             loss_term_0 = loss_term_0 + neg_log_constants
             loss_term_0 = (loss_term_0 * t_is_zero).sum() / t_is_zero.sum()
 
             # Computing noise returned by dynamics
             noise_0 = (noise * t_is_zero).sum() / t_is_zero.sum()
         else:
-            loss_term_0 = 0.
-            noise_0 = 0.
+            loss_term_0 = 0.0
+            noise_0 = 0.0
 
-        return delta_log_px, kl_prior, loss_term_t, loss_term_0, l2_loss, noise_t, noise_0
+        return (
+            delta_log_px,
+            kl_prior,
+            loss_term_t,
+            loss_term_0,
+            l2_loss,
+            noise_t,
+            noise_0,
+            l2_loss_atom,
+            l2_loss_pos,
+        )
 
     @torch.no_grad()
-    def sample_chain(self, x, h, node_mask, scaffold_mask, rgroup_mask, edge_mask, context, keep_frames=None):
+    def sample_chain(
+        self,
+        x,
+        h,
+        node_mask,
+        scaffold_mask,
+        rgroup_mask,
+        edge_mask,
+        context,
+        keep_frames=None,
+    ):
         n_samples = x.size(0)
         n_nodes = x.size(1)
 
         # Normalization and concatenation
-        x, h, = self.normalize(x, h)
+        (
+            x,
+            h,
+        ) = self.normalize(x, h)
         xh = torch.cat([x, h], dim=2)
 
         # Initial rgroup sampling from N(0, I)
-        z = self.sample_combined_position_feature_noise(n_samples, n_nodes, mask=rgroup_mask)
+        z = self.sample_combined_position_feature_noise(
+            n_samples, n_nodes, mask=rgroup_mask
+        )
         z = xh * scaffold_mask + z * rgroup_mask
 
         if keep_frames is None:
@@ -172,12 +226,16 @@ class EDM(torch.nn.Module):
 
         return chain
 
-    def sample_p_zs_given_zt_only_rgroup(self, s, t, z_t, node_mask, scaffold_mask, rgroup_mask, edge_mask, context):
+    def sample_p_zs_given_zt_only_rgroup(
+        self, s, t, z_t, node_mask, scaffold_mask, rgroup_mask, edge_mask, context
+    ):
         """Samples from zs ~ p(zs | zt). Only used during sampling. Samples only rgroup features and coords"""
         gamma_s = self.gamma(s)
         gamma_t = self.gamma(t)
 
-        sigma2_t_given_s, sigma_t_given_s, alpha_t_given_s = self.sigma_and_alpha_t_given_s(gamma_t, gamma_s, z_t)
+        sigma2_t_given_s, sigma_t_given_s, alpha_t_given_s = (
+            self.sigma_and_alpha_t_given_s(gamma_t, gamma_s, z_t)
+        )
         sigma_s = self.sigma(gamma_s, target_tensor=z_t)
         sigma_t = self.sigma(gamma_t, target_tensor=z_t)
 
@@ -193,7 +251,10 @@ class EDM(torch.nn.Module):
         eps_hat = eps_hat * rgroup_mask
 
         # Compute mu for p(z_s | z_t)
-        mu = z_t / alpha_t_given_s - (sigma2_t_given_s / alpha_t_given_s / sigma_t) * eps_hat
+        mu = (
+            z_t / alpha_t_given_s
+            - (sigma2_t_given_s / alpha_t_given_s / sigma_t) * eps_hat
+        )
 
         # Compute sigma for p(z_s | z_t)
         sigma = sigma_t_given_s * sigma_s / sigma_t
@@ -204,7 +265,9 @@ class EDM(torch.nn.Module):
 
         return z_s
 
-    def sample_p_xh_given_z0_only_rgroup(self, z_0, node_mask, scaffold_mask, rgroup_mask, edge_mask, context):
+    def sample_p_xh_given_z0_only_rgroup(
+        self, z_0, node_mask, scaffold_mask, rgroup_mask, edge_mask, context
+    ):
         """Samples x ~ p(x|z0). Samples only rgroup features and coords"""
         zeros = torch.zeros(size=(z_0.size(0), 1), device=z_0.device)
         gamma_0 = self.gamma(zeros)
@@ -217,7 +280,7 @@ class EDM(torch.nn.Module):
             node_mask=node_mask,
             rgroup_mask=rgroup_mask,
             edge_mask=edge_mask,
-            context=context
+            context=context,
         )
         eps_hat = eps_hat * rgroup_mask
 
@@ -225,7 +288,7 @@ class EDM(torch.nn.Module):
         xh = self.sample_normal(mu=mu_x, sigma=sigma_x, node_mask=rgroup_mask)
         xh = z_0 * scaffold_mask + xh * rgroup_mask
 
-        x, h = xh[:, :, :self.n_dims], xh[:, :, self.n_dims:]
+        x, h = xh[:, :, : self.n_dims], xh[:, :, self.n_dims :]
         x, h = self.unnormalize(x, h)
         h = F.one_hot(torch.argmax(h, dim=2), self.in_node_nf) * node_mask
 
@@ -235,7 +298,7 @@ class EDM(torch.nn.Module):
         """Computes x_pred, i.e. the most likely prediction of x."""
         sigma_t = self.sigma(gamma_t, target_tensor=eps_t)
         alpha_t = self.alpha(gamma_t, target_tensor=eps_t)
-        x_pred = 1. / alpha_t * (z_t - sigma_t * eps_t)
+        x_pred = 1.0 / alpha_t * (z_t - sigma_t * eps_t)
         return x_pred
 
     def kl_prior(self, xh, mask):
@@ -251,10 +314,12 @@ class EDM(torch.nn.Module):
 
         # Compute means
         mu_T = alpha_T * xh
-        mu_T_x, mu_T_h = mu_T[:, :, :self.n_dims], mu_T[:, :, self.n_dims:]
+        mu_T_x, mu_T_h = mu_T[:, :, : self.n_dims], mu_T[:, :, self.n_dims :]
 
         # Compute standard deviations (only batch axis for x-part, inflated for h-part)
-        sigma_T_x = self.sigma(gamma_T, mu_T_x).view(-1)  # Remove inflate, only keep batch dimension for x-part
+        sigma_T_x = self.sigma(gamma_T, mu_T_x).view(
+            -1
+        )  # Remove inflate, only keep batch dimension for x-part
         sigma_T_h = self.sigma(gamma_T, mu_T_h)
 
         # Compute KL for h-part
@@ -264,7 +329,9 @@ class EDM(torch.nn.Module):
         # Compute KL for x-part
         zeros, ones = torch.zeros_like(mu_T_x), torch.ones_like(sigma_T_x)
         d = self.dimensionality(mask)
-        kl_distance_x = self.gaussian_kl_for_dimension(mu_T_x, sigma_T_x, zeros, ones, d=d)
+        kl_distance_x = self.gaussian_kl_for_dimension(
+            mu_T_x, sigma_T_x, zeros, ones, d=d
+        )
 
         return kl_distance_x + kl_distance_h
 
@@ -277,22 +344,26 @@ class EDM(torch.nn.Module):
         # Recall that sigma_x = sqrt(sigma_0^2 / alpha_0^2) = SNR(-0.5 gamma_0)
         log_sigma_x = 0.5 * gamma_0.view(batch_size)
 
-        return degrees_of_freedom_x * (- log_sigma_x - 0.5 * np.log(2 * np.pi))
+        return degrees_of_freedom_x * (-log_sigma_x - 0.5 * np.log(2 * np.pi))
 
-    def log_p_xh_given_z0_without_constants(self, h, z_0, gamma_0, eps, eps_hat, mask, epsilon=1e-10):
+    def log_p_xh_given_z0_without_constants(
+        self, h, z_0, gamma_0, eps, eps_hat, mask, epsilon=1e-10
+    ):
         # Discrete properties are predicted directly from z_0
-        z_h = z_0[:, :, self.n_dims:]
+        z_h = z_0[:, :, self.n_dims :]
 
         # Take only part over x
-        eps_x = eps[:, :, :self.n_dims]
-        eps_hat_x = eps_hat[:, :, :self.n_dims]
+        eps_x = eps[:, :, : self.n_dims]
+        eps_hat_x = eps_hat[:, :, : self.n_dims]
 
         # Compute sigma_0 and rescale to the integer scale of the data
         sigma_0 = self.sigma(gamma_0, target_tensor=z_0) * self.norm_values[1]
 
         # Computes the error for the distribution N(x | 1 / alpha_0 z_0 + sigma_0/alpha_0 eps_0, sigma_0 / alpha_0),
         # the weighting in the epsilon parametrization is exactly '1'
-        log_p_x_given_z_without_constants = -0.5 * self.sum_except_batch((eps_x - eps_hat_x) ** 2)
+        log_p_x_given_z_without_constants = -0.5 * self.sum_except_batch(
+            (eps_x - eps_hat_x) ** 2
+        )
 
         # Categorical features
         # Compute delta indicator masks
@@ -305,9 +376,9 @@ class EDM(torch.nn.Module):
         # Compute integrals from 0.5 to 1.5 of the normal distribution
         # N(mean=centered_h_cat, stdev=sigma_0_cat)
         log_p_h_proportional = torch.log(
-            self.cdf_standard_gaussian((centered_h + 0.5) / sigma_0) -
-            self.cdf_standard_gaussian((centered_h - 0.5) / sigma_0) +
-            epsilon
+            self.cdf_standard_gaussian((centered_h + 0.5) / sigma_0)
+            - self.cdf_standard_gaussian((centered_h - 0.5) / sigma_0)
+            + epsilon
         )
 
         # Normalize the distribution over the categories
@@ -324,21 +395,21 @@ class EDM(torch.nn.Module):
 
     def sample_combined_position_feature_noise(self, n_samples, n_nodes, mask):
         z_x = utils.sample_gaussian_with_mask(
-            size=(n_samples, n_nodes, self.n_dims),
-            device=mask.device,
-            node_mask=mask
+            size=(n_samples, n_nodes, self.n_dims), device=mask.device, node_mask=mask
         )
         z_h = utils.sample_gaussian_with_mask(
             size=(n_samples, n_nodes, self.in_node_nf),
             device=mask.device,
-            node_mask=mask
+            node_mask=mask,
         )
         z = torch.cat([z_x, z_h], dim=2)
         return z
 
     def sample_normal(self, mu, sigma, node_mask):
         """Samples from a Normal distribution."""
-        eps = self.sample_combined_position_feature_noise(mu.size(0), mu.size(1), node_mask)
+        eps = self.sample_combined_position_feature_noise(
+            mu.size(0), mu.size(1), node_mask
+        )
         return mu + sigma * eps
 
     def normalize(self, x, h):
@@ -353,7 +424,7 @@ class EDM(torch.nn.Module):
 
     def unnormalize_z(self, z):
         assert z.size(2) == self.n_dims + self.in_node_nf
-        x, h = z[:, :, :self.n_dims], z[:, :, self.n_dims:]
+        x, h = z[:, :, : self.n_dims], z[:, :, self.n_dims :]
         x, h = self.unnormalize(x, h)
         return torch.cat([x, h], dim=2)
 
@@ -369,13 +440,17 @@ class EDM(torch.nn.Module):
 
     def alpha(self, gamma, target_tensor):
         """Computes alpha given gamma."""
-        return self.inflate_batch_array(torch.sqrt(torch.sigmoid(-gamma)), target_tensor)
+        return self.inflate_batch_array(
+            torch.sqrt(torch.sigmoid(-gamma)), target_tensor
+        )
 
     def SNR(self, gamma):
         """Computes signal to noise ratio (alpha^2/sigma^2) given gamma."""
         return torch.exp(-gamma)
 
-    def sigma_and_alpha_t_given_s(self, gamma_t: torch.Tensor, gamma_s: torch.Tensor, target_tensor: torch.Tensor):
+    def sigma_and_alpha_t_given_s(
+        self, gamma_t: torch.Tensor, gamma_s: torch.Tensor, target_tensor: torch.Tensor
+    ):
         """
         Computes sigma t given s, using gamma_t and gamma_s. Used during sampling.
 
@@ -384,8 +459,7 @@ class EDM(torch.nn.Module):
             sigma t given s = sqrt(1 - (alpha t given s) ^2 ).
         """
         sigma2_t_given_s = self.inflate_batch_array(
-            -self.expm1(self.softplus(gamma_s) - self.softplus(gamma_t)),
-            target_tensor
+            -self.expm1(self.softplus(gamma_s) - self.softplus(gamma_t)), target_tensor
         )
 
         # alpha_t_given_s = alpha_t / alpha_s
@@ -426,7 +500,7 @@ class EDM(torch.nn.Module):
 
     @staticmethod
     def cdf_standard_gaussian(x):
-        return 0.5 * (1. + torch.erf(x / math.sqrt(2)))
+        return 0.5 * (1.0 + torch.erf(x / math.sqrt(2)))
 
     @staticmethod
     def gaussian_kl(q_mu, q_sigma, p_mu, p_sigma):
@@ -440,7 +514,11 @@ class EDM(torch.nn.Module):
         Returns:
             The KL distance, summed over all dimensions except the batch dim.
         """
-        kl = torch.log(p_sigma / q_sigma) + 0.5 * (q_sigma ** 2 + (q_mu - p_mu) ** 2) / (p_sigma ** 2) - 0.5
+        kl = (
+            torch.log(p_sigma / q_sigma)
+            + 0.5 * (q_sigma**2 + (q_mu - p_mu) ** 2) / (p_sigma**2)
+            - 0.5
+        )
         return EDM.sum_except_batch(kl)
 
     @staticmethod
@@ -457,5 +535,8 @@ class EDM(torch.nn.Module):
             The KL distance, summed over all dimensions except the batch dim.
         """
         mu_norm_2 = EDM.sum_except_batch((q_mu - p_mu) ** 2)
-        return d * torch.log(p_sigma / q_sigma) + 0.5 * (d * q_sigma ** 2 + mu_norm_2) / (p_sigma ** 2) - 0.5 * d
-
+        return (
+            d * torch.log(p_sigma / q_sigma)
+            + 0.5 * (d * q_sigma**2 + mu_norm_2) / (p_sigma**2)
+            - 0.5 * d
+        )

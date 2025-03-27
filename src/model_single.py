@@ -197,17 +197,17 @@ class DDPM(pl.LightningModule):
         node_mask = data["atom_mask"]
         edge_mask = data["edge_mask"]
         anchors = data["anchors"]
-        scaffold_mask = data["scaffold_mask"]
+        # scaffold_mask = data["scaffold_mask"]
         rgroup_mask = data["rgroup_mask"]
 
-        # Anchors and scaffolds labels are used as context
-        if self.anchors_context:
-            context = torch.cat([anchors, scaffold_mask], dim=-1)
-        else:
-            context = scaffold_mask
+        # # Anchors and scaffolds labels are used as context
+        # if self.anchors_context:
+        #     context = torch.cat([anchors, scaffold_mask], dim=-1)
+        # else:
+        #     context = scaffold_mask
 
         # Add information about pocket to the context
-        scaffold_pocket_mask = scaffold_mask
+        scaffold_pocket_mask = data["scaffold_mask"]
         scaffold_only_mask = data["scaffold_only_mask"]
         pocket_only_mask = scaffold_pocket_mask - scaffold_only_mask
         if self.anchors_context:
@@ -218,8 +218,8 @@ class DDPM(pl.LightningModule):
         # Removing COM of scaffold from the atom coordinates
         if self.center_of_mass == "scaffold":
             center_of_mass_mask = data["scaffold_only_mask"]
-        elif self.center_of_mass == "scaffold":
-            center_of_mass_mask = scaffold_mask
+        elif self.center_of_mass == "complex":
+            center_of_mass_mask = scaffold_pocket_mask
         elif self.center_of_mass == "anchors":
             center_of_mass_mask = anchors
         else:
@@ -231,20 +231,49 @@ class DDPM(pl.LightningModule):
         if training and self.data_augmentation:
             x = utils.random_rotation(x)
 
-        return self.edm.forward(
+        (
+            delta_log_px,
+            kl_prior,
+            loss_term_t,
+            loss_term_0,
+            l2_loss,
+            noise_t,
+            noise_0,
+            l2_loss_atom,
+            l2_loss_pos,
+        ) = self.edm.forward(
             x=x,
             h=h,
             node_mask=node_mask,
-            scaffold_mask=scaffold_mask,
+            scaffold_mask=scaffold_pocket_mask,
             rgroup_mask=rgroup_mask,
             edge_mask=edge_mask,
             context=context,
         )
+        return (
+            delta_log_px,
+            kl_prior,
+            loss_term_t,
+            loss_term_0,
+            l2_loss,
+            noise_t,
+            noise_0,
+            l2_loss_atom,
+            l2_loss_pos,
+        )
 
     def training_step(self, data, *args):
-        delta_log_px, kl_prior, loss_term_t, loss_term_0, l2_loss, noise_t, noise_0 = (
-            self.forward(data, training=True)
-        )
+        (
+            delta_log_px,
+            kl_prior,
+            loss_term_t,
+            loss_term_0,
+            l2_loss,
+            noise_t,
+            noise_0,
+            l2_loss_atom,
+            l2_loss_pos,
+        ) = self.forward(data, training=True)
         vlb_loss = kl_prior + loss_term_t + loss_term_0 - delta_log_px
         if self.loss_type == "l2":
             loss = l2_loss
@@ -264,6 +293,8 @@ class DDPM(pl.LightningModule):
             "noise_t": noise_t,
             "noise_0": noise_0,
             "progress_bar": loss,
+            "l2_loss_pos": l2_loss_pos,
+            "l2_loss_atom": l2_loss_atom,
         }
         if (
             self.log_iterations is not None

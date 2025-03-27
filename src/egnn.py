@@ -1,13 +1,26 @@
 import math
+
 import numpy as np
 import torch
 import torch.nn as nn
 
 from src import utils
 
+
 class GCL(nn.Module):
-    def __init__(self, input_nf, output_nf, hidden_nf, normalization_factor, aggregation_method, activation,
-                 edges_in_d=0, nodes_att_dim=0, attention=False, normalization=None):
+    def __init__(
+        self,
+        input_nf,
+        output_nf,
+        hidden_nf,
+        normalization_factor,
+        aggregation_method,
+        activation,
+        edges_in_d=0,
+        nodes_att_dim=0,
+        attention=False,
+        normalization=None,
+    ):
         super(GCL, self).__init__()
         input_edge = input_nf * 2
         self.normalization_factor = normalization_factor
@@ -18,15 +31,16 @@ class GCL(nn.Module):
             nn.Linear(input_edge + edges_in_d, hidden_nf),
             activation,
             nn.Linear(hidden_nf, hidden_nf),
-            activation)
+            activation,
+        )
 
         if normalization is None:
             self.node_mlp = nn.Sequential(
                 nn.Linear(hidden_nf + input_nf + nodes_att_dim, hidden_nf),
                 activation,
-                nn.Linear(hidden_nf, output_nf)
+                nn.Linear(hidden_nf, output_nf),
             )
-        elif normalization == 'batch_norm':
+        elif normalization == "batch_norm":
             self.node_mlp = nn.Sequential(
                 nn.Linear(hidden_nf + input_nf + nodes_att_dim, hidden_nf),
                 nn.BatchNorm1d(hidden_nf),
@@ -59,9 +73,13 @@ class GCL(nn.Module):
 
     def node_model(self, x, edge_index, edge_attr, node_attr):
         row, col = edge_index
-        agg = unsorted_segment_sum(edge_attr, row, num_segments=x.size(0),
-                                   normalization_factor=self.normalization_factor,
-                                   aggregation_method=self.aggregation_method)
+        agg = unsorted_segment_sum(
+            edge_attr,
+            row,
+            num_segments=x.size(0),
+            normalization_factor=self.normalization_factor,
+            aggregation_method=self.aggregation_method,
+        )
         if node_attr is not None:
             agg = torch.cat([x, agg, node_attr], dim=1)
         else:
@@ -69,7 +87,15 @@ class GCL(nn.Module):
         out = x + self.node_mlp(agg)
         return out, agg
 
-    def forward(self, h, edge_index, edge_attr=None, node_attr=None, node_mask=None, edge_mask=None):
+    def forward(
+        self,
+        h,
+        edge_index,
+        edge_attr=None,
+        node_attr=None,
+        node_mask=None,
+        edge_mask=None,
+    ):
         row, col = edge_index
         edge_feat, mij = self.edge_model(h[row], h[col], edge_attr, edge_mask)
         h, agg = self.node_model(h, edge_index, edge_feat, node_attr)
@@ -79,8 +105,16 @@ class GCL(nn.Module):
 
 
 class EquivariantUpdate(nn.Module):
-    def __init__(self, hidden_nf, normalization_factor, aggregation_method,
-                 edges_in_d=1, activation=nn.SiLU(), tanh=False, coords_range=10.0):
+    def __init__(
+        self,
+        hidden_nf,
+        normalization_factor,
+        aggregation_method,
+        edges_in_d=1,
+        activation=nn.SiLU(),
+        tanh=False,
+        coords_range=10.0,
+    ):
         super(EquivariantUpdate, self).__init__()
         self.tanh = tanh
         self.coords_range = coords_range
@@ -92,22 +126,33 @@ class EquivariantUpdate(nn.Module):
             activation,
             nn.Linear(hidden_nf, hidden_nf),
             activation,
-            layer)
+            layer,
+        )
         self.normalization_factor = normalization_factor
         self.aggregation_method = aggregation_method
 
-    def coord_model(self, h, coord, edge_index, coord_diff, edge_attr, edge_mask, rgroup_mask):
+    def coord_model(
+        self, h, coord, edge_index, coord_diff, edge_attr, edge_mask, rgroup_mask
+    ):
         row, col = edge_index
         input_tensor = torch.cat([h[row], h[col], edge_attr], dim=1)
         if self.tanh:
-            trans = coord_diff * torch.tanh(self.coord_mlp(input_tensor)) * self.coords_range
+            trans = (
+                coord_diff
+                * torch.tanh(self.coord_mlp(input_tensor))
+                * self.coords_range
+            )
         else:
             trans = coord_diff * self.coord_mlp(input_tensor)
         if edge_mask is not None:
             trans = trans * edge_mask
-        agg = unsorted_segment_sum(trans, row, num_segments=coord.size(0),
-                                   normalization_factor=self.normalization_factor,
-                                   aggregation_method=self.aggregation_method)
+        agg = unsorted_segment_sum(
+            trans,
+            row,
+            num_segments=coord.size(0),
+            normalization_factor=self.normalization_factor,
+            aggregation_method=self.aggregation_method,
+        )
         if rgroup_mask is not None:
             agg = agg * rgroup_mask
 
@@ -115,18 +160,41 @@ class EquivariantUpdate(nn.Module):
         return coord
 
     def forward(
-            self, h, coord, edge_index, coord_diff, edge_attr=None, rgroup_mask=None, node_mask=None, edge_mask=None
+        self,
+        h,
+        coord,
+        edge_index,
+        coord_diff,
+        edge_attr=None,
+        rgroup_mask=None,
+        node_mask=None,
+        edge_mask=None,
     ):
-        coord = self.coord_model(h, coord, edge_index, coord_diff, edge_attr, edge_mask, rgroup_mask)
+        coord = self.coord_model(
+            h, coord, edge_index, coord_diff, edge_attr, edge_mask, rgroup_mask
+        )
         if node_mask is not None:
             coord = coord * node_mask
         return coord
 
 
 class EquivariantBlock(nn.Module):
-    def __init__(self, hidden_nf, edge_feat_nf=2, device='cpu', activation=nn.SiLU(), n_layers=2, attention=True,
-                 norm_diff=True, tanh=False, coords_range=15, norm_constant=1, sin_embedding=None,
-                 normalization_factor=100, aggregation_method='sum'):
+    def __init__(
+        self,
+        hidden_nf,
+        edge_feat_nf=2,
+        device="cpu",
+        activation=nn.SiLU(),
+        n_layers=2,
+        attention=True,
+        norm_diff=True,
+        tanh=False,
+        coords_range=15,
+        norm_constant=1,
+        sin_embedding=None,
+        normalization_factor=100,
+        aggregation_method="sum",
+    ):
         super(EquivariantBlock, self).__init__()
         self.hidden_nf = hidden_nf
         self.device = device
@@ -139,26 +207,59 @@ class EquivariantBlock(nn.Module):
         self.aggregation_method = aggregation_method
 
         for i in range(0, n_layers):
-            self.add_module("gcl_%d" % i, GCL(self.hidden_nf, self.hidden_nf, self.hidden_nf, edges_in_d=edge_feat_nf,
-                                              activation=activation, attention=attention,
-                                              normalization_factor=self.normalization_factor,
-                                              aggregation_method=self.aggregation_method))
-        self.add_module("gcl_equiv", EquivariantUpdate(hidden_nf, edges_in_d=edge_feat_nf, activation=activation, tanh=tanh,
-                                                       coords_range=self.coords_range_layer,
-                                                       normalization_factor=self.normalization_factor,
-                                                       aggregation_method=self.aggregation_method))
+            self.add_module(
+                "gcl_%d" % i,
+                GCL(
+                    self.hidden_nf,
+                    self.hidden_nf,
+                    self.hidden_nf,
+                    edges_in_d=edge_feat_nf,
+                    activation=activation,
+                    attention=attention,
+                    normalization_factor=self.normalization_factor,
+                    aggregation_method=self.aggregation_method,
+                ),
+            )
+        self.add_module(
+            "gcl_equiv",
+            EquivariantUpdate(
+                hidden_nf,
+                edges_in_d=edge_feat_nf,
+                activation=activation,
+                tanh=tanh,
+                coords_range=self.coords_range_layer,
+                normalization_factor=self.normalization_factor,
+                aggregation_method=self.aggregation_method,
+            ),
+        )
         self.to(self.device)
 
-    def forward(self, h, x, edge_index, node_mask=None, rgroup_mask=None, edge_mask=None, edge_attr=None):
+    def forward(
+        self,
+        h,
+        x,
+        edge_index,
+        node_mask=None,
+        rgroup_mask=None,
+        edge_mask=None,
+        edge_attr=None,
+    ):
         # Edit Emiel: Remove velocity as input
         distances, coord_diff = coord2diff(x, edge_index, self.norm_constant)
         if self.sin_embedding is not None:
             distances = self.sin_embedding(distances)
         edge_attr = torch.cat([distances, edge_attr], dim=1)
         for i in range(0, self.n_layers):
-            h, _ = self._modules["gcl_%d" % i](h, edge_index, edge_attr=edge_attr, node_mask=node_mask, edge_mask=edge_mask)
+            h, _ = self._modules["gcl_%d" % i](
+                h,
+                edge_index,
+                edge_attr=edge_attr,
+                node_mask=node_mask,
+                edge_mask=edge_mask,
+            )
         x = self._modules["gcl_equiv"](
-            h, x,
+            h,
+            x,
             edge_index=edge_index,
             coord_diff=coord_diff,
             edge_attr=edge_attr,
@@ -174,16 +275,32 @@ class EquivariantBlock(nn.Module):
 
 
 class EGNN(nn.Module):
-    def __init__(self, in_node_nf, in_edge_nf, hidden_nf, device='cpu', activation=nn.SiLU(), n_layers=3, attention=False,
-                 norm_diff=True, out_node_nf=None, tanh=False, coords_range=15, norm_constant=1, inv_sublayers=2,
-                 sin_embedding=False, normalization_factor=100, aggregation_method='sum'):
+    def __init__(
+        self,
+        in_node_nf,
+        in_edge_nf,
+        hidden_nf,
+        device="cpu",
+        activation=nn.SiLU(),
+        n_layers=3,
+        attention=False,
+        norm_diff=True,
+        out_node_nf=None,
+        tanh=False,
+        coords_range=15,
+        norm_constant=1,
+        inv_sublayers=2,
+        sin_embedding=False,
+        normalization_factor=100,
+        aggregation_method="sum",
+    ):
         super(EGNN, self).__init__()
         if out_node_nf is None:
             out_node_nf = in_node_nf
         self.hidden_nf = hidden_nf
         self.device = device
         self.n_layers = n_layers
-        self.coords_range_layer = float(coords_range/n_layers)
+        self.coords_range_layer = float(coords_range / n_layers)
         self.norm_diff = norm_diff
         self.normalization_factor = normalization_factor
         self.aggregation_method = aggregation_method
@@ -198,16 +315,29 @@ class EGNN(nn.Module):
         self.embedding = nn.Linear(in_node_nf, self.hidden_nf)
         self.embedding_out = nn.Linear(self.hidden_nf, out_node_nf)
         for i in range(0, n_layers):
-            self.add_module("e_block_%d" % i, EquivariantBlock(hidden_nf, edge_feat_nf=edge_feat_nf, device=device,
-                                                               activation=activation, n_layers=inv_sublayers,
-                                                               attention=attention, norm_diff=norm_diff, tanh=tanh,
-                                                               coords_range=coords_range, norm_constant=norm_constant,
-                                                               sin_embedding=self.sin_embedding,
-                                                               normalization_factor=self.normalization_factor,
-                                                               aggregation_method=self.aggregation_method))
+            self.add_module(
+                "e_block_%d" % i,
+                EquivariantBlock(
+                    hidden_nf,
+                    edge_feat_nf=edge_feat_nf,
+                    device=device,
+                    activation=activation,
+                    n_layers=inv_sublayers,
+                    attention=attention,
+                    norm_diff=norm_diff,
+                    tanh=tanh,
+                    coords_range=coords_range,
+                    norm_constant=norm_constant,
+                    sin_embedding=self.sin_embedding,
+                    normalization_factor=self.normalization_factor,
+                    aggregation_method=self.aggregation_method,
+                ),
+            )
         self.to(self.device)
 
-    def forward(self, h, x, edge_index, node_mask=None, rgroup_mask=None, edge_mask=None):
+    def forward(
+        self, h, x, edge_index, node_mask=None, rgroup_mask=None, edge_mask=None
+    ):
         # Edit Emiel: Remove velocity as input
         distances, _ = coord2diff(x, edge_index)
         if self.sin_embedding is not None:
@@ -216,11 +346,13 @@ class EGNN(nn.Module):
         h = self.embedding(h)
         for i in range(0, self.n_layers):
             h, x = self._modules["e_block_%d" % i](
-                h, x, edge_index,
+                h,
+                x,
+                edge_index,
                 node_mask=node_mask,
                 rgroup_mask=rgroup_mask,
                 edge_mask=edge_mask,
-                edge_attr=distances
+                edge_attr=distances,
             )
 
         # Important, the bias of the last linear might be non-zero
@@ -231,9 +363,20 @@ class EGNN(nn.Module):
 
 
 class GNN(nn.Module):
-    def __init__(self, in_node_nf, in_edge_nf, hidden_nf, aggregation_method='sum', device='cpu',
-                 activation=nn.SiLU(), n_layers=4, attention=False, normalization_factor=1,
-                 out_node_nf=None, normalization=None):
+    def __init__(
+        self,
+        in_node_nf,
+        in_edge_nf,
+        hidden_nf,
+        aggregation_method="sum",
+        device="cpu",
+        activation=nn.SiLU(),
+        n_layers=4,
+        attention=False,
+        normalization_factor=1,
+        out_node_nf=None,
+        normalization=None,
+    ):
         super(GNN, self).__init__()
         if out_node_nf is None:
             out_node_nf = in_node_nf
@@ -245,19 +388,29 @@ class GNN(nn.Module):
         self.embedding = nn.Linear(in_node_nf, self.hidden_nf)
         self.embedding_out = nn.Linear(self.hidden_nf, out_node_nf)
         for i in range(0, n_layers):
-            self.add_module("gcl_%d" % i, GCL(
-                self.hidden_nf, self.hidden_nf, self.hidden_nf,
-                normalization_factor=normalization_factor,
-                aggregation_method=aggregation_method,
-                edges_in_d=in_edge_nf, activation=activation,
-                attention=attention, normalization=normalization))
+            self.add_module(
+                "gcl_%d" % i,
+                GCL(
+                    self.hidden_nf,
+                    self.hidden_nf,
+                    self.hidden_nf,
+                    normalization_factor=normalization_factor,
+                    aggregation_method=aggregation_method,
+                    edges_in_d=in_edge_nf,
+                    activation=activation,
+                    attention=attention,
+                    normalization=normalization,
+                ),
+            )
         self.to(self.device)
 
     def forward(self, h, edges, edge_attr=None, node_mask=None, edge_mask=None):
         # Edit Emiel: Remove velocity as input
         h = self.embedding(h)
         for i in range(0, self.n_layers):
-            h, _ = self._modules["gcl_%d" % i](h, edges, edge_attr=edge_attr, node_mask=node_mask, edge_mask=edge_mask)
+            h, _ = self._modules["gcl_%d" % i](
+                h, edges, edge_attr=edge_attr, node_mask=node_mask, edge_mask=edge_mask
+            )
         h = self.embedding_out(h)
 
         # Important, the bias of the last linear might be non-zero
@@ -267,10 +420,12 @@ class GNN(nn.Module):
 
 
 class SinusoidsEmbeddingNew(nn.Module):
-    def __init__(self, max_res=15., min_res=15. / 2000., div_factor=4):
+    def __init__(self, max_res=15.0, min_res=15.0 / 2000.0, div_factor=4):
         super().__init__()
         self.n_frequencies = int(math.log(max_res / min_res, div_factor)) + 1
-        self.frequencies = 2 * math.pi * div_factor ** torch.arange(self.n_frequencies)/max_res
+        self.frequencies = (
+            2 * math.pi * div_factor ** torch.arange(self.n_frequencies) / max_res
+        )
         self.dim = len(self.frequencies) * 2
 
     def forward(self, x):
@@ -285,22 +440,24 @@ def coord2diff(x, edge_index, norm_constant=1):
     coord_diff = x[row] - x[col]
     radial = torch.sum((coord_diff) ** 2, 1).unsqueeze(1)
     norm = torch.sqrt(radial + 1e-8)
-    coord_diff = coord_diff/(norm + norm_constant)
+    coord_diff = coord_diff / (norm + norm_constant)
     return radial, coord_diff
 
 
-def unsorted_segment_sum(data, segment_ids, num_segments, normalization_factor, aggregation_method: str):
+def unsorted_segment_sum(
+    data, segment_ids, num_segments, normalization_factor, aggregation_method: str
+):
     """Custom PyTorch op to replicate TensorFlow's `unsorted_segment_sum`.
-        Normalization: 'sum' or 'mean'.
+    Normalization: 'sum' or 'mean'.
     """
     result_shape = (num_segments, data.size(1))
     result = data.new_full(result_shape, 0)  # Init empty result tensor.
     segment_ids = segment_ids.unsqueeze(-1).expand(-1, data.size(1))
     result.scatter_add_(0, segment_ids, data)
-    if aggregation_method == 'sum':
+    if aggregation_method == "sum":
         result = result / normalization_factor
 
-    if aggregation_method == 'mean':
+    if aggregation_method == "mean":
         norm = data.new_zeros(result.shape)
         norm.scatter_add_(0, segment_ids, data.new_ones(data.shape))
         norm[norm == 0] = 1
@@ -310,10 +467,25 @@ def unsorted_segment_sum(data, segment_ids, num_segments, normalization_factor, 
 
 class Dynamics(nn.Module):
     def __init__(
-            self, n_dims, in_node_nf, context_node_nf, hidden_nf=64, device='cpu', activation=nn.SiLU(),
-            n_layers=4, attention=False, condition_time=True, tanh=False, norm_constant=0, inv_sublayers=2,
-            sin_embedding=False, normalization_factor=100, aggregation_method='sum', model='egnn_dynamics',
-            normalization=None, centering=False,
+        self,
+        n_dims,
+        in_node_nf,
+        context_node_nf,
+        hidden_nf=64,
+        device="cpu",
+        activation=nn.SiLU(),
+        n_layers=4,
+        attention=False,
+        condition_time=True,
+        tanh=False,
+        norm_constant=0,
+        inv_sublayers=2,
+        sin_embedding=False,
+        normalization_factor=100,
+        aggregation_method="sum",
+        model="egnn_dynamics",
+        normalization=None,
+        centering=False,
     ):
         super().__init__()
         self.device = device
@@ -324,11 +496,12 @@ class Dynamics(nn.Module):
         self.centering = centering
 
         in_node_nf = in_node_nf + context_node_nf + condition_time
-        if self.model == 'egnn_dynamics':
+        if self.model == "egnn_dynamics":
             self.dynamics = EGNN(
                 in_node_nf=in_node_nf,
                 in_edge_nf=1,
-                hidden_nf=hidden_nf, device=device,
+                hidden_nf=hidden_nf,
+                device=device,
                 activation=activation,
                 n_layers=n_layers,
                 attention=attention,
@@ -339,12 +512,12 @@ class Dynamics(nn.Module):
                 normalization_factor=normalization_factor,
                 aggregation_method=aggregation_method,
             )
-        elif self.model == 'gnn_dynamics':
+        elif self.model == "gnn_dynamics":
             self.dynamics = GNN(
-                in_node_nf=in_node_nf+3,
+                in_node_nf=in_node_nf + 3,
                 in_edge_nf=0,
                 hidden_nf=hidden_nf,
-                out_node_nf=in_node_nf+3,
+                out_node_nf=in_node_nf + 3,
                 device=device,
                 activation=activation,
                 n_layers=n_layers,
@@ -376,8 +549,8 @@ class Dynamics(nn.Module):
 
         # Reshaping node features & adding time feature
         xh = xh.view(bs * n_nodes, -1).clone() * node_mask  # (B*N, D)
-        x = xh[:, :self.n_dims].clone()  # (B*N, 3)
-        h = xh[:, self.n_dims:].clone()  # (B*N, nf)
+        x = xh[:, : self.n_dims].clone()  # (B*N, 3)
+        h = xh[:, self.n_dims :].clone()  # (B*N, nf)
         if self.condition_time:
             if np.prod(t.size()) == 1:
                 # t is the same for all elements in batch.
@@ -388,22 +561,24 @@ class Dynamics(nn.Module):
                 h_time = h_time.view(bs * n_nodes, 1)
             h = torch.cat([h, h_time], dim=1)  # (B*N, nf+1)
         if context is not None:
-            context = context.view(bs*n_nodes, self.context_node_nf)
+            context = context.view(bs * n_nodes, self.context_node_nf)
             h = torch.cat([h, context], dim=1)
 
         # Forward EGNN
         # Output: h_final (B*N, nf), x_final (B*N, 3), vel (B*N, 3)
-        if self.model == 'egnn_dynamics':
+        if self.model == "egnn_dynamics":
             h_final, x_final = self.dynamics(
                 h,
                 x,
                 edges,
                 node_mask=node_mask,
                 rgroup_mask=rgroup_mask,
-                edge_mask=edge_mask
+                edge_mask=edge_mask,
             )
-            vel = (x_final - x) * node_mask  # This masking operation is redundant but just in case
-        elif self.model == 'gnn_dynamics':
+            vel = (
+                x_final - x
+            ) * node_mask  # This masking operation is redundant but just in case
+        elif self.model == "gnn_dynamics":
             xh = torch.cat([x, h], dim=1)
             output = self.dynamics(xh, edges, node_mask=node_mask)
             vel = output[:, 0:3] * node_mask
@@ -413,7 +588,7 @@ class Dynamics(nn.Module):
 
         # Slice off context size
         if context is not None:
-            h_final = h_final[:, :-self.context_node_nf]
+            h_final = h_final[:, : -self.context_node_nf]
 
         # Slice off last dimension which represented time.
         if self.condition_time:
@@ -444,7 +619,10 @@ class Dynamics(nn.Module):
                         for j in range(n_nodes):
                             rows.append(i + batch_idx * n_nodes)
                             cols.append(j + batch_idx * n_nodes)
-                edges = [torch.LongTensor(rows).to(self.device), torch.LongTensor(cols).to(self.device)]
+                edges = [
+                    torch.LongTensor(rows).to(self.device),
+                    torch.LongTensor(cols).to(self.device),
+                ]
                 edges_dic_b[batch_size] = edges
                 return edges
         else:
@@ -470,8 +648,8 @@ class DynamicsWithPockets(Dynamics):
 
         # Reshaping node features & adding time feature
         xh = xh.view(bs * n_nodes, -1).clone() * node_mask  # (B*N, D)
-        x = xh[:, :self.n_dims].clone()  # (B*N, 3)
-        h = xh[:, self.n_dims:].clone()  # (B*N, nf)
+        x = xh[:, : self.n_dims].clone()  # (B*N, 3)
+        h = xh[:, self.n_dims :].clone()  # (B*N, nf)
 
         edges = self.get_dist_edges(x, node_mask, edge_mask)
         if self.condition_time:
@@ -484,22 +662,24 @@ class DynamicsWithPockets(Dynamics):
                 h_time = h_time.view(bs * n_nodes, 1)
             h = torch.cat([h, h_time], dim=1)  # (B*N, nf+1)
         if context is not None:
-            context = context.view(bs*n_nodes, self.context_node_nf)
+            context = context.view(bs * n_nodes, self.context_node_nf)
             h = torch.cat([h, context], dim=1)
 
         # Forward EGNN
         # Output: h_final (B*N, nf), x_final (B*N, 3), vel (B*N, 3)
-        if self.model == 'egnn_dynamics':
+        if self.model == "egnn_dynamics":
             h_final, x_final = self.dynamics(
                 h,
                 x,
                 edges,
                 node_mask=node_mask,
                 rgroup_mask=rgroup_mask,
-                edge_mask=None
+                edge_mask=None,
             )
-            vel = (x_final - x) * node_mask  # This masking operation is redundant but just in case
-        elif self.model == 'gnn_dynamics':
+            vel = (
+                x_final - x
+            ) * node_mask  # This masking operation is redundant but just in case
+        elif self.model == "gnn_dynamics":
             xh = torch.cat([x, h], dim=1)
             output = self.dynamics(xh, edges, node_mask=node_mask)
             vel = output[:, 0:3] * node_mask
@@ -509,7 +689,7 @@ class DynamicsWithPockets(Dynamics):
 
         # Slice off context size
         if context is not None:
-            h_final = h_final[:, :-self.context_node_nf]
+            h_final = h_final[:, : -self.context_node_nf]
 
         # Slice off last dimension which represented time.
         if self.condition_time:
@@ -530,9 +710,9 @@ class DynamicsWithPockets(Dynamics):
     @staticmethod
     def get_dist_edges(x, node_mask, batch_mask):
         node_mask = node_mask.squeeze().bool()
-        batch_adj = (batch_mask[:, None] == batch_mask[None, :])
-        nodes_adj = (node_mask[:, None] & node_mask[None, :])
-        dists_adj = (torch.cdist(x, x) <= 4)
+        batch_adj = batch_mask[:, None] == batch_mask[None, :]
+        nodes_adj = node_mask[:, None] & node_mask[None, :]
+        dists_adj = torch.cdist(x, x) <= 4
         rm_self_loops = ~torch.eye(x.size(0), dtype=torch.bool, device=x.device)
         adj = batch_adj & nodes_adj & dists_adj & rm_self_loops
         edges = torch.stack(torch.where(adj))

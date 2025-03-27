@@ -94,18 +94,6 @@ def main(args):
 
     callbacks = [
         MLFlowModelCheckpoint(
-            mlflow_logger,
-            filename="best_train_mse",
-            monitor="train_pos_MeanSquaredError",
-            mode="min",
-        ),
-        MLFlowModelCheckpoint(
-            mlflow_logger,
-            filename="best_val_mse",
-            monitor="val_tot_MeanSquaredError",
-            mode="min",
-        ),
-        MLFlowModelCheckpoint(
             mlflow_logger, filename="last_epoch", monitor="epoch", mode="max"
         ),
     ]
