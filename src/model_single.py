@@ -79,6 +79,7 @@ class DDPM(pl.LightningModule):
         self.save_hyperparameters()
 
         # Data paths
+        data_path = "/home/ubuntu/playground_jean/DiffDec/data/single"
         self.train_data_path = Path(data_path) / "train_jean"
         self.test_data_path = Path(data_path) / "test_jean"
 
@@ -447,6 +448,7 @@ class DDPM(pl.LightningModule):
 
         # Add information about pocket to the context
         scaffold_pocket_mask = scaffold_mask
+
         scaffold_only_mask = template_data["scaffold_only_mask"]
         pocket_only_mask = scaffold_pocket_mask - scaffold_only_mask
         if self.anchors_context:
