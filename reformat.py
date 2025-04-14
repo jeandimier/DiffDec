@@ -6,11 +6,6 @@ import subprocess
 from rdkit import Chem
 from src.utils import disable_rdkit_logging
 
-from tqdm import tqdm
-import csv
-import numpy as np
-import torch
-
 def load_rdkit_molecule(xyz_path, obabel_path, scaf_sdf_path, true_sdf_path, true_scaf_smi_ori, true_mol_smi_ori):
     supp = Chem.SDMolSupplier(obabel_path, sanitize=False)
     mol = list(supp)[0]
@@ -32,7 +27,7 @@ def load_rdkit_molecule(xyz_path, obabel_path, scaf_sdf_path, true_sdf_path, tru
     
     match = mol_filtered.GetSubstructMatch(true_scaf)
 
-    if len(match) == 0: 
+    if len(match) == 0:
         true_scaf = Chem.MolFromSmiles(true_scaf_smi_ori, sanitize=False)
         try:
             Chem.SanitizeMol(mol_filtered)
