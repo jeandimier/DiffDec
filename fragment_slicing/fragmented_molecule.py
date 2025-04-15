@@ -1,11 +1,11 @@
 from collections import OrderedDict
 
+from attachment_points import AttachmentPoints
+from bond_maker import BondMaker
 from rdkit.Chem.rdchem import Mol
 
-from fragment_slicing.attachment_points import AttachmentPoints
-from fragment_slicing.bond_maker import BondMaker
-from fragment_slicing.utils.conversions import Conversions
-from fragment_slicing.utils.tokens import TransformationTokens
+from utils.conversions import Conversions
+from utils.tokens import TransformationTokens
 
 
 class FragmentedMolecule:

@@ -3,8 +3,8 @@ from typing import List
 
 from rdkit.Chem.rdchem import Mol
 
-from fragment_slicing.utils.conversions import Conversions
-from fragment_slicing.utils.tokens import TransformationTokens
+from utils.conversions import Conversions
+from utils.tokens import TransformationTokens
 
 
 class AttachmentPoints:

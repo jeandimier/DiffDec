@@ -3,20 +3,20 @@ from typing import List
 
 import pyspark.sql as ps
 import pyspark.sql.functions as psf
-from rdkit import Chem
-
-import utils.spark as us
-from fragment_slicing.attachment_points import AttachmentPoints
-from fragment_slicing.dtos import (
+from attachment_points import AttachmentPoints
+from dtos import (
     FilteringConditionDTO,
     ReactionBasedSlicingConfig,
     SlicingConditionsDTO,
 )
-from fragment_slicing.fragment_reaction_slice_enumerator import (
+from fragment_reaction_slice_enumerator import (
     FragmentReactionSliceEnumerator,
 )
-from fragment_slicing.fragment_reactions import FragmentReactions
-from fragment_slicing.utils.enums import DataframeColumnsEnum
+from fragment_reactions import FragmentReactions
+from rdkit import Chem
+
+import utils.spark as us
+from utils.enums import DataframeColumnsEnum
 
 
 class ReactionBasedSlicer:

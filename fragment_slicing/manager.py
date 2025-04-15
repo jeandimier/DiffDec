@@ -1,8 +1,8 @@
 from dacite import from_dict
+from dtos import GeneralConfiguration, ReactionBasedSlicingConfig
+from reaction_based_slicing import ReactionBasedSlicer
 
-from fragment_slicing.dtos import GeneralConfiguration, ReactionBasedSlicingConfig
-from fragment_slicing.reaction_based_slicing import ReactionBasedSlicer
-from fragment_slicing.utils.enums import RunningModeEnum
+from utils.enums import RunningModeEnum
 
 
 class Manager:

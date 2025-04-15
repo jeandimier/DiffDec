@@ -1,9 +1,9 @@
+from attachment_points import AttachmentPoints
 from rdkit.Chem.rdchem import BondType, Mol, RWMol
 from rdkit.Chem.rdmolops import CombineMols, SanitizeMol
 
-from fragment_slicing.attachment_points import AttachmentPoints
-from fragment_slicing.utils.conversions import Conversions
-from fragment_slicing.utils.tokens import TransformationTokens
+from utils.conversions import Conversions
+from utils.tokens import TransformationTokens
 
 
 class BondMaker:

@@ -1,5 +1,6 @@
 from typing import List
 
+from dtos import FilteringConditionDTO
 from rdkit.Chem.Crippen import MolLogP
 from rdkit.Chem.Descriptors import MolWt
 from rdkit.Chem.Lipinski import (
@@ -11,9 +12,8 @@ from rdkit.Chem.Lipinski import (
 )
 from rdkit.Chem.rdchem import Mol
 
-from fragment_slicing.dtos.filtering_condition_dto import FilteringConditionDTO
-from fragment_slicing.utils.enums import MolecularDescriptorsEnum
-from fragment_slicing.utils.tokens import TransformationTokens
+from utils.enums import MolecularDescriptorsEnum
+from utils.tokens import TransformationTokens
 
 
 class FragmentFilter:

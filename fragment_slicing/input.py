@@ -4,9 +4,8 @@ import json
 import sys
 
 from dacite import from_dict
+from dtos import GeneralConfiguration
 from manager import Manager
-
-from fragment_slicing.dtos import GeneralConfiguration
 
 if __name__ == "__main__":
     with open(sys.argv[1]) as f:

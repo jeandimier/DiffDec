@@ -1,14 +1,14 @@
 from collections import OrderedDict
 from typing import List, Set, Tuple
 
+from dtos import FilteringConditionDTO, ReactionDTO
+from fragment_filter import FragmentFilter
+from fragment_reactions import FragmentReactions
+from fragmented_molecule import FragmentedMolecule
 from rdkit.Chem.rdchem import Mol
 
-from fragment_slicing.dtos import FilteringConditionDTO, ReactionDTO
-from fragment_slicing.fragment_filter import FragmentFilter
-from fragment_slicing.fragment_reactions import FragmentReactions
-from fragment_slicing.fragmented_molecule import FragmentedMolecule
-from fragment_slicing.utils.conversions import Conversions
-from fragment_slicing.utils.tokens import TransformationTokens
+from utils.conversions import Conversions
+from utils.tokens import TransformationTokens
 
 
 class FragmentReactionSliceEnumerator:

@@ -1,11 +1,11 @@
 from typing import Dict, List, Tuple
 
+from dtos import ReactionOutcomeDTO
 from rdkit.Chem.rdchem import Atom, AtomKekulizeException, Mol
 from rdkit.Chem.rdmolops import FragmentOnBonds, GetMolFrags
 
-from fragment_slicing.dtos import ReactionOutcomeDTO
-from fragment_slicing.utils.conversions import Conversions
-from fragment_slicing.utils.tokens import TransformationTokens
+from utils.conversions import Conversions
+from utils.tokens import TransformationTokens
 
 
 class BondMapper:

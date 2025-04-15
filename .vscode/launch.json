@@ -47,5 +47,15 @@
                 "--device=cuda:0"
             ]
         },
+        {
+            "name": "Slice fragments",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/ubuntu/playground_jean/DiffDec/fragment_slicing/input.py",
+            "console": "integratedTerminal",
+            "args": [
+                "/home/ubuntu/playground_jean/DiffDec/fragment_slicing/output_dir/reaction_slicing_config.json"
+            ]
+        },
     ]
 }

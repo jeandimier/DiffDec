@@ -1,13 +1,13 @@
 from typing import List, Tuple
 
+from bond_mapper import BondMapper
+from dtos import ReactionDTO, ReactionOutcomeDTO
 from rdkit.Chem import AllChem, Mol
 from rdkit.Chem.Lipinski import RingCount
 from rdkit.Chem.rdChemReactions import ChemicalReaction
 
-from fragment_slicing.bond_mapper import BondMapper
-from fragment_slicing.dtos import ReactionDTO, ReactionOutcomeDTO
-from fragment_slicing.utils.conversions import Conversions
-from fragment_slicing.utils.tokens import TransformationTokens
+from utils.conversions import Conversions
+from utils.tokens import TransformationTokens
 
 
 class FragmentReactions:
