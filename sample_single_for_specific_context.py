@@ -3,6 +3,7 @@ import itertools
 import os
 import pickle
 import subprocess
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -85,6 +86,10 @@ def set_anchor_flags(mol, anchor_idx):
 
 
 def update_scaffold(scaf):
+    """Flags the anchor atom, and removes the undefined atom represented by the star symbol,
+    along with its associated bond (the function checks that there is indeed only one bond
+    linked to the star).
+    """
     if scaf is None:
         return None
     star_symbol = get_exits(scaf)
@@ -186,7 +191,11 @@ def get_anchors_idx(mol):
     return anchors_idx
 
 
-def process_sdf(scaf_dataset):
+def process_sdf(
+    scaf_dataset,
+) -> tuple[
+    List[Chem.Mol], List[Chem.Mol], List[str], dict, pd.DataFrame
+]:  # molecules, scaffolds, rgroups, pockets, pd.DataFrame(out_table)
     molecules = []
     scaffolds = []
     rgroups = []
@@ -280,6 +289,7 @@ def prepare(
     with Chem.SDWriter(open(out_rgroup_path, "w")) as writer:
         writer.SetKekulize(False)
         for i, rgroup in enumerate(rgroups):
+            # TODO: check if not bullshit
             writer.write(rgroup)
     with open(out_pockets_path, "wb") as f:
         pickle.dump(pockets, f)
@@ -332,6 +342,7 @@ def sample(checkpoint, samples_dir, data_dir, n_samples, task_name, device):
     # In case <Anonymous> will run my model or vice versa
     if data_dir is not None:
         model.data_path = data_dir
+        model.test_data_path = data_dir
 
     # Setting up the model
     model = model.eval().to(device)
